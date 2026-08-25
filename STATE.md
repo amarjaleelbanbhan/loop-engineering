@@ -1,6 +1,6 @@
 # Loop State — loop-engineering reference
 
-Last run: 2026-07-29T08:53:29Z (automated daily-triage workflow)
+Last run: 2026-08-25T08:36:24Z (automated daily-triage workflow)
 
 ## High Priority (loop is acting or waiting on human)
 
