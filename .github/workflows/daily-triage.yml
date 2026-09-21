@@ -191,7 +191,6 @@ jobs:
             PR_NUMBER=$(gh pr view "$BRANCH" --json number -q '.number')
           fi
           echo "number=${PR_NUMBER}" >> "$GITHUB_OUTPUT"
-          gh pr merge "$PR_NUMBER" --auto --squash --delete-branch
 
       - name: Post required commit statuses for branch protection
         if: steps.pr.outputs.opened == 'true'
@@ -227,6 +226,13 @@ jobs:
                 target_url: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
               });
             }
+
+      # Post the inline branch-protection statuses before requesting auto-merge.
+      - name: Enable auto-merge after commit statuses
+        if: steps.pr.outputs.opened == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr merge "${{ steps.pr.outputs.number }}" --auto --squash --delete-branch
 
       - name: Open weekly loop report issue (Mondays)
         if: github.event.schedule == '0 8 * * 1-5' && format('{0}', github.run_attempt) == '1'
