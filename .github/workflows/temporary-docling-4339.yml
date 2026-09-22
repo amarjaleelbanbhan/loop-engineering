@@ -1,0 +1,71 @@
+name: Temporary Docling 4339 fixture capture
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/temporary-docling-4339.yml
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out Docling contribution without credentials
+        uses: actions/checkout@v4
+        with:
+          repository: amarjaleelbanbhan/docling
+          ref: fix/latex-paragraph-macro-spacing-4339
+          fetch-depth: 1
+          persist-credentials: false
+          path: docling
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.10"
+          enable-cache: false
+      - name: Install Docling test requirements
+        working-directory: docling
+        run: uv sync --frozen --group dev --all-extras --all-packages --no-group docs --no-group examples
+      - name: Regenerate LaTeX fixtures and capture minimal patch
+        working-directory: docling
+        run: |
+          uv run --no-sync python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          from docling.datamodel.base_models import InputFormat
+          from docling.document_converter import DocumentConverter
+          from tests.verify_utils import verify_document, verify_export
+
+          root = Path("./tests/data/latex/sources/")
+          paths = list(root.glob("*.tex"))
+          for subdir in root.iterdir():
+              if subdir.is_dir():
+                  if (subdir / "main.tex").exists():
+                      paths.append(subdir / "main.tex")
+                  elif (subdir / f"arxiv_{subdir.name}.tex").exists():
+                      paths.append(subdir / f"arxiv_{subdir.name}.tex")
+          paths.sort()
+          converter = DocumentConverter(allowed_formats=[InputFormat.LATEX])
+          for path in paths:
+              name = path.name if path.parent.resolve() == root.resolve() else f"{path.parent.name}_{path.name}"
+              gt = root.parent / "groundtruth" / name
+              doc = converter.convert(path).document
+              verify_export(doc.export_to_markdown(compact_tables=True), str(gt) + ".md", generate=True)
+              verify_export(doc._export_to_indented_text(max_text_len=70, explicit_tables=False), str(gt) + ".itxt", generate=True)
+              verify_document(doc, str(gt) + ".json", generate=True)
+              print("DOCFIX_REGENERATED:" + name, flush=True)
+
+          patch = subprocess.run(
+              ["git", "diff", "--unified=0", "--", "tests/data/latex/groundtruth"],
+              check=True, text=True, capture_output=True,
+          ).stdout
+          print("DOCFIX_BEGIN", flush=True)
+          for line in patch.splitlines():
+              print("DOCFIX_LINE:" + json.dumps(line, ensure_ascii=True), flush=True)
+          print("DOCFIX_END", flush=True)
+          print("DOCFIX_DIFF_LINES:" + str(len(patch.splitlines())), flush=True)
+          PY
